@@ -109,6 +109,39 @@ def plot_history(history, save_path):
     plt.close()
     print(f"✓ Grafici salvati in: {save_path}")
 
+class OverfittingDetector(tf.keras.callbacks.Callback):
+    def __init__(self, tolerance_factor=1.1, patience=3):
+        super().__init__()
+        self.val_loss_history = []
+        self.train_loss_history = []
+        self.best_val_loss = float('inf')
+        self.epochs_no_improve = 0
+        self.tolerance_factor = tolerance_factor # val_loss > train_loss * tolerance_factor
+        self.patience = patience # how many epochs val_loss can increase before warning
+
+    def on_epoch_end(self, epoch, logs=None):
+        logs = logs or {}
+        train_loss = logs.get('loss')
+        val_loss = logs.get('val_loss')
+
+        if train_loss is None or val_loss is None:
+            return
+
+        self.val_loss_history.append(val_loss)
+        self.train_loss_history.append(train_loss)
+
+        # Check for increasing val_loss
+        if val_loss >= self.best_val_loss:
+            self.epochs_no_improve += 1
+        else:
+            self.best_val_loss = val_loss
+            self.epochs_no_improve = 0
+
+        # Overfitting criteria: val_loss is increasing AND significantly higher than train_loss
+        if self.epochs_no_improve >= self.patience and val_loss > train_loss * self.tolerance_factor:
+            print(f"\n⚠️ EPOCH {epoch+1}: Possibile overfitting! Val Loss ({val_loss:.4f}) ha peggiorato o non è migliorata per {self.patience} epoche "
+                  f"e sta diventando significativamente maggiore di Train Loss ({train_loss:.4f}).")
+
 def preprocess_dataset_item(image, label):
     """Applica il preprocessing specifico di MobileNetV3Small all'immagine."""
     image = tf.keras.applications.mobilenet_v3.preprocess_input(image)
@@ -178,6 +211,7 @@ def main():
         patience=10,
         restore_best_weights=True
     )
+    overfitting_detector = OverfittingDetector(tolerance_factor=1.1, patience=3)
 
     history = None
     try:
@@ -187,7 +221,7 @@ def main():
             train_ds,
             epochs=50,
             validation_data=val_ds,
-            callbacks=[early_stopping]
+            callbacks=[early_stopping, overfitting_detector]
         )
         print("✓ Training completato.")
     except KeyboardInterrupt:
