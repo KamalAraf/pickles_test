@@ -51,31 +51,51 @@ def evaluate_model(model, val_ds):
     print(f"  - Accuratezza sul set di validazione: {accuracy * 100:.2f}%")
     print(f"  - Loss sul set di validazione: {loss:.4f}")
 
+def preprocess_dataset_item(image, label):
+    """Applica il preprocessing specifico di MobileNetV3Small all'immagine."""
+    image = tf.keras.applications.mobilenet_v3.preprocess_input(image)
+    return image, label
+
 def interactive_test(model, class_names, val_ds):
     """Permette di testare immagini casuali dal set di validazione."""
     
     # Converte il dataset in una lista di tuple (immagine, etichetta) per un accesso casuale facile
     print("\nPreparazione per il test interattivo...")
-    validation_data = list(val_ds.unbatch().as_numpy_iterator())
-    print("✓ Dati di validazione pronti.")
+    # Qui val_ds è già pre-processato e pronto per il modello.
+    # Per visualizzare, dobbiamo prendere l'immagine originale e pre-processarla per il modello.
+    
+    # Per il test interattivo, otteniamo le immagini originali e le etichette dal dataset RAW,
+    # poi applichiamo il preprocessing solo all'immagine da predire.
+    raw_val_ds = tf.keras.utils.image_dataset_from_directory(
+        DATASET_DIR,
+        validation_split=0.2,
+        subset="validation",
+        seed=123,
+        image_size=(IMG_HEIGHT, IMG_WIDTH),
+        batch_size=1, # Prendiamo una immagine alla volta per semplicità
+        label_mode='binary'
+    )
+    validation_data_for_display = list(raw_val_ds.unbatch().as_numpy_iterator())
+    print("✓ Dati di validazione per visualizzazione pronti.")
 
     while True:
         print("\n--- Test Interattivo ---")
         
-        # Scegli un'immagine e la sua etichetta a caso
-        img, true_label_index = random.choice(validation_data)
-        true_label_name = class_names[int(true_label_index)]
+        # Scegli un'immagine e la sua etichetta a caso dal dataset RAW
+        original_img_np, true_label_index_raw = random.choice(validation_data_for_display)
+        true_label_name = class_names[int(true_label_index_raw)]
 
-        # L'immagine è già un array numpy, basta aggiungere la dimensione del batch
-        img_array_expanded = np.expand_dims(img, axis=0)
+        # Applica il preprocessing solo all'immagine che va al modello
+        img_for_prediction = tf.keras.applications.mobilenet_v3.preprocess_input(original_img_np)
+        img_array_expanded = np.expand_dims(img_for_prediction, axis=0)
         
         # Predizione
         prediction_score = model.predict(img_array_expanded)[0][0]
         predicted_class_index = 1 if prediction_score > 0.5 else 0
         predicted_class_name = class_names[predicted_class_index]
 
-        # Mostra i risultati
-        plt.imshow(img.astype("uint8"))
+        # Mostra i risultati usando l'immagine originale non preprocessata per la visualizzazione
+        plt.imshow(original_img_np.astype("uint8"))
         plt.title(f"Reale: {true_label_name} | Predetto: {predicted_class_name} (Score: {prediction_score:.2f})")
         plt.axis("off")
         plt.show()
@@ -96,7 +116,7 @@ def main():
 
     model.summary()
 
-    # Carica il dataset di validazione una sola volta
+    # Carica il dataset di validazione una sola volta e applica il preprocessing
     val_ds = tf.keras.utils.image_dataset_from_directory(
         DATASET_DIR,
         validation_split=0.2,
@@ -105,10 +125,11 @@ def main():
         image_size=(IMG_HEIGHT, IMG_WIDTH),
         batch_size=BATCH_SIZE,
         label_mode='binary'
-    ).cache().prefetch(buffer_size=tf.data.AUTOTUNE)
+    ).map(preprocess_dataset_item, num_parallel_calls=tf.data.AUTOTUNE).cache().prefetch(buffer_size=tf.data.AUTOTUNE)
     
     evaluate_model(model, val_ds)
     
+    # interactive_test ora riceve il val_ds, ma per la visualizzazione carica le immagini raw
     interactive_test(model, class_names, val_ds)
     
     print("\nArrivederci!")

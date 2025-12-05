@@ -57,16 +57,11 @@ def load_and_prepare_dataset():
     return train_ds, val_ds, class_names
 
 def create_model():
-    """Crea un modello di classificazione basato su MobileNetV3Small."""
+    """Crea un modello di classificazione basato su MobileNetV3Small.
+    Questo modello si aspetta input già pre-processati nell'intervallo [-1, 1].
+    """
     print("\n--- Creazione del modello ---")
     
-    # Data Augmentation per migliorare la generalizzazione del modello
-    data_augmentation = tf.keras.Sequential([
-        tf.keras.layers.RandomFlip("horizontal"),
-        tf.keras.layers.RandomRotation(0.1),
-        tf.keras.layers.RandomZoom(0.1),
-    ], name='data_augmentation')
-
     # Modello base pre-addestrato
     base_model = tf.keras.applications.MobileNetV3Small(
         input_shape=(IMG_HEIGHT, IMG_WIDTH, 3),
@@ -77,10 +72,7 @@ def create_model():
 
     # Creazione del modello completo
     inputs = tf.keras.Input(shape=(IMG_HEIGHT, IMG_WIDTH, 3))
-    x = data_augmentation(inputs)
-    x = tf.keras.applications.mobilenet_v3.preprocess_input(x)
-    # Rimosso training=True per permettere a Keras di gestire la modalità inferenza/training
-    x = base_model(x)
+    x = base_model(inputs) # Il preprocessing avviene prima di questo
     x = tf.keras.layers.GlobalAveragePooling2D()(x)
     x = tf.keras.layers.Dropout(0.3)(x)
     
@@ -117,13 +109,34 @@ def plot_history(history, save_path):
     plt.close()
     print(f"✓ Grafici salvati in: {save_path}")
 
+def preprocess_dataset_item(image, label):
+    """Applica il preprocessing specifico di MobileNetV3Small all'immagine."""
+    image = tf.keras.applications.mobilenet_v3.preprocess_input(image)
+    return image, label
+
 def main():
     """Funzione principale per orchestrare il processo."""
     clear_screen()
     print(f"\n{'='*50}\nTRAINING PER RICONOSCIMENTO LINEA\n{'='*50}")
 
     configure_tensorflow()
-    train_ds, val_ds, class_names = load_and_prepare_dataset()
+    train_ds_raw, val_ds_raw, class_names = load_and_prepare_dataset()
+    
+    # Data Augmentation per migliorare la generalizzazione del modello (applicata al dataset)
+    data_augmentation = tf.keras.Sequential([
+        tf.keras.layers.RandomFlip("horizontal"),
+        tf.keras.layers.RandomRotation(0.1),
+        tf.keras.layers.RandomZoom(0.1),
+    ], name='data_augmentation')
+
+    AUTOTUNE = tf.data.AUTOTUNE
+
+    # Applica l'augmentation e il preprocessing al dataset di training
+    train_ds = train_ds_raw.map(lambda x, y: (data_augmentation(x, training=True), y), num_parallel_calls=AUTOTUNE)
+    train_ds = train_ds.map(preprocess_dataset_item, num_parallel_calls=AUTOTUNE)
+
+    # Applica solo il preprocessing al dataset di validazione (nessuna augmentation)
+    val_ds = val_ds_raw.map(preprocess_dataset_item, num_parallel_calls=AUTOTUNE)
     
     model = create_model()
 

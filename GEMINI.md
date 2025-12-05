@@ -6,6 +6,27 @@ Questo documento `GEMINI.md` serve come memoria interna e registro di contesto p
 
 ## Riepilogo della Sessione Attuale (Per la Prossima Sessione)
 
+This session focused on debugging runtime issues and further refining the data preprocessing pipeline to ensure robust and consistent behavior between training and inference.
+
+**1. Debugging Runtime Errors and Preprocessing Refinement:**
+-   **Initial Issue:** The user reported a generic error occurring "after main()", suggesting a runtime issue rather than a syntax error.
+-   **Hypothesis:** A common source of such errors in Keras applications is inconsistent data preprocessing between training and inference, or incorrect handling of model layers (like Batch Normalization) during evaluation.
+-   **Fix in `train.py`:**
+    -   **Removed Hardcoded `training=True`:** Corrected the call to the `base_model` from `x = base_model(x, training=True)` to `x = base_model(x)`. This allows Keras to automatically manage the `training` flag for layers like Batch Normalization and Dropout during training (`model.fit`) and inference (`model.predict`/`model.evaluate`). This was a critical fix to ensure correct model behavior during evaluation.
+    -   **Moved Preprocessing to Dataset Pipeline:** The `data_augmentation` layer and `tf.keras.applications.mobilenet_v3.preprocess_input` were moved *out* of the `create_model` function. They are now applied directly to the `train_ds` and `val_ds` using `.map()` operations within the `main` function. This ensures that the data is augmented and preprocessed *before* being fed to the model, providing a more robust and explicit data pipeline.
+-   **Fix in `test.py`:**
+    -   **Ensured Consistent Preprocessing:** The `preprocess_dataset_item` function (similar to `train.py`) is now used to preprocess the `val_ds` before model evaluation.
+    -   **Refactored Interactive Test:** The `interactive_test` function was significantly improved. It now loads *raw* images from the validation set for display (to maintain visual integrity) and then applies `tf.keras.applications.mobilenet_v3.preprocess_input` *just before* feeding the image to the model for prediction. This guarantees that the model receives data in the exact format it was trained on.
+    -   **Matplotlib Backend:** Added `matplotlib.use('TkAgg')` at the beginning of the script to prevent potential display issues with plot windows.
+
+**2. Resolution of Syntax Error Report:**
+-   The user reported a `;;;;;` syntax error after `main()`. Upon inspection of the actual files, this error was not present in the code. It was likely a misinterpretation of a runtime error message or a local console anomaly.
+
+**Stato Attuale:** Both `train.py` and `test.py` have been extensively refactored and debugged to ensure a robust and consistent MLOps pipeline for binary image classification. The data preprocessing is explicitly handled in the dataset pipeline, and the model's behavior during training and inference is correctly managed. The scripts are now ready for reliable training and testing.
+
+---
+## (Previous session summaries are kept below for historical context)
+
 This session focused on a complete refactoring and simplification of the AI training and testing pipeline to address the user's core requirement: classifying images as containing a line (`linea`) or not (`no_linea`).
 
 **1. Objective: Simplification and Refocus**
