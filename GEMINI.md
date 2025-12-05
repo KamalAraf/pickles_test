@@ -6,7 +6,7 @@ Questo documento `GEMINI.md` serve come memoria interna e registro di contesto p
 
 ## Riepilogo della Sessione Attuale (Per la Prossima Sessione)
 
-This session focused on debugging runtime issues, further refining the data preprocessing pipeline, enhancing data augmentation, and implementing a graceful shutdown feature in the training script.
+This session focused on debugging runtime issues, further refining the data preprocessing pipeline, enhancing data augmentation, implementing a graceful shutdown feature, fixing a critical model loading error, and improving the interactive testing experience.
 
 **1. Debugging Runtime Errors and Preprocessing Refinement:**
 -   **Initial Issue:** The user reported a generic error occurring "after main()", suggesting a runtime issue rather than a syntax error.
@@ -16,22 +16,31 @@ This session focused on debugging runtime issues, further refining the data prep
     -   **Moved Preprocessing to Dataset Pipeline:** The `data_augmentation` layer and `tf.keras.applications.mobilenet_v3.preprocess_input` were moved *out* of the `create_model` function. They are now applied directly to the `train_ds` and `val_ds` using `.map()` operations within the `main` function. This ensures that the data is augmented and preprocessed *before* being fed to the model, providing a more robust and explicit data pipeline.
 -   **Fix in `test.py`:**
     -   **Ensured Consistent Preprocessing:** The `preprocess_dataset_item` function (similar to `train.py`) is now used to preprocess the `val_ds` before model evaluation.
-    -   **Refactored Interactive Test:** The `interactive_test` function was significantly improved. It now loads *raw* images from the validation set for display (to maintain visual integrity) and then applies `tf.keras.applications.mobilenet_v3.preprocess_input` *just before* feeding the image to the model for prediction. This guarantees that the model receives data in the exact format it was trained on.
     -   **Matplotlib Backend:** Added `matplotlib.use('TkAgg')` at the beginning of the script to prevent potential display issues with plot windows.
 
 **2. Data Augmentation Enhancements (`train.py`):**
 -   **Added `RandomBrightness`:** Included `tf.keras.layers.RandomBrightness(factor=0.2)` to introduce random brightness variations in the training data.
--   **Increased `RandomRotation`:** The `RandomRotation` factor was increased to `0.2` to provide a wider range of rotational augmentation.
--   **Increased `RandomZoom`:** The `RandomZoom` factor was increased to `0.2` to provide a wider range of zoom augmentation.
+-   **Increased `RandomRotation`:** The `RandomRotation` factor was increased from `0.2` to `0.3` to provide a wider range of rotational augmentation.
+-   **Increased `RandomZoom`:** The `RandomZoom` factor was increased from `0.2` to `0.3` to provide a wider range of zoom augmentation.
 
 **3. Graceful Shutdown (`train.py`):**
 -   **Implemented `try...except KeyboardInterrupt`:** The `model.fit()` call is now wrapped in a `try...except` block.
 -   **Save on Interrupt:** If the user presses `Ctrl+C`, the training is gracefully stopped, and a new `save_results` function is called. Thanks to the `EarlyStopping` callback's `restore_best_weights=True` parameter, this saves the model from the epoch with the best `val_loss` achieved up to the point of interruption.
 
-**4. Resolution of Syntax Error Report:**
+**4. Model Loading Error Resolution & Backward Compatibility:**
+-   **Issue:** The user reported a `TensorFlow` error during model loading in `test.py` ("Only input tensors may be passed as positional arguments..."). This pointed to an issue with saving the `MobileNetV3Small`-based model in the older `.h5` format.
+-   **Solution:** The primary solution was to switch the model saving format in `train.py` to the modern and more robust `.keras` format.
+-   **Backward Compatibility (`test.py`):** To handle models that might have been saved in the older format, the `load_model_and_classes` function in `test.py` was updated. It now first looks for a `line_detection_model.keras` file. If not found, it falls back to looking for `line_detection_model.h5`, ensuring that either format can be loaded.
+
+**5. Enhanced Interactive Testing (`test.py`):**
+-   **Category Selection:** The `interactive_test` function in `test.py` was refactored. It now separates the validation images into `linea` and `no_linea` lists.
+-   **New Prompt:** The user is now prompted with `Cosa vuoi testare? (1: linea / 2: no_linea / s: casuale / n: esci): `, allowing them to choose which specific class to test, test randomly as before, or exit.
+-   **Augmented Test Images:** The `interactive_test` function now applies a data augmentation layer (mirroring `train.py`'s settings) to the chosen image before displaying it and feeding it to the model for prediction. This allows the user to visually test the model's robustness to augmented inputs.
+
+**6. Resolution of Syntax Error Report:**
 -   The user reported a `;;;;;` syntax error after `main()`. Upon inspection of the actual files, this error was not present in the code. It was likely a misinterpretation of a runtime error message or a local console anomaly.
 
-**Stato Attuale:** Both `train.py` and `test.py` have been extensively refactored and debugged to ensure a robust and consistent MLOps pipeline for binary image classification. The data preprocessing is explicitly handled in the dataset pipeline, and the model's behavior during training and inference is correctly managed. The data augmentation strategy has been enhanced, and a graceful shutdown feature has been added. The scripts are now ready for reliable training and testing.
+**Stato Attuale:** Both `train.py` and `test.py` have been extensively refactored and debugged to ensure a robust and consistent MLOps pipeline for binary image classification. Key improvements include a more robust data pipeline, enhanced data augmentation, a graceful shutdown feature for training, flexible model loading, and a more controlled interactive testing experience. The scripts are now ready for reliable training and testing.
 
 ---
 ## (Previous session summaries are kept below for historical context)

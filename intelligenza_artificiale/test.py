@@ -14,7 +14,7 @@ BATCH_SIZE = 32
 # Percorsi
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 MODEL_DIR = os.path.join(SCRIPT_DIR, 'modello_linea')
-MODEL_PATH = os.path.join(MODEL_DIR, 'line_detection_model.h5')
+
 CLASSES_PATH = os.path.join(MODEL_DIR, 'class_names.txt')
 DATASET_DIR = os.path.join(SCRIPT_DIR, 'dataset')
 
@@ -23,10 +23,23 @@ def clear_screen():
     os.system('cls' if os.name == 'nt' else 'clear')
 
 def load_model_and_classes():
-    """Carica il modello e i nomi delle classi."""
+    """Carica il modello e i nomi delle classi, cercando prima il formato .keras e poi .h5."""
     print("--- Caricamento modello e classi ---")
-    if not os.path.exists(MODEL_PATH):
-        print(f"❌ Errore: Modello non trovato in '{MODEL_PATH}'.")
+    
+    model_path_keras = os.path.join(MODEL_DIR, 'line_detection_model.keras')
+    model_path_h5 = os.path.join(MODEL_DIR, 'line_detection_model.h5')
+    
+    model_path_to_load = None
+    if os.path.exists(model_path_keras):
+        model_path_to_load = model_path_keras
+        print(f"✓ Trovato modello in formato .keras: {model_path_to_load}")
+    elif os.path.exists(model_path_h5):
+        model_path_to_load = model_path_h5
+        print(f"✓ Trovato modello in formato .h5: {model_path_to_load}")
+    else:
+        print(f"❌ Errore: Nessun modello trovato. Controllati i percorsi:")
+        print(f"  - {model_path_keras}")
+        print(f"  - {model_path_h5}")
         print("Assicurati di aver eseguito prima lo script di training (train.py).")
         return None, None
 
@@ -35,13 +48,13 @@ def load_model_and_classes():
         return None, None
 
     try:
-        model = tf.keras.models.load_model(MODEL_PATH)
+        model = tf.keras.models.load_model(model_path_to_load)
         with open(CLASSES_PATH, 'r') as f:
             class_names = [line.strip() for line in f.readlines()]
         print(f"✓ Modello e classi ({class_names}) caricati con successo.")
         return model, class_names
     except Exception as e:
-        print(f"❌ Errore durante il caricamento: {e}")
+        print(f"❌ Errore durante il caricamento del modello '{os.path.basename(model_path_to_load)}': {e}")
         return None, None
 
 def evaluate_model(model, val_ds):
@@ -57,53 +70,91 @@ def preprocess_dataset_item(image, label):
     return image, label
 
 def interactive_test(model, class_names, val_ds):
-    """Permette di testare immagini casuali dal set di validazione."""
+    """Permette di testare immagini casuali in modo interattivo, scegliendo la categoria e applicando augmentation."""
     
-    # Converte il dataset in una lista di tuple (immagine, etichetta) per un accesso casuale facile
     print("\nPreparazione per il test interattivo...")
-    # Qui val_ds è già pre-processato e pronto per il modello.
-    # Per visualizzare, dobbiamo prendere l'immagine originale e pre-processarla per il modello.
-    
-    # Per il test interattivo, otteniamo le immagini originali e le etichette dal dataset RAW,
-    # poi applichiamo il preprocessing solo all'immagine da predire.
     raw_val_ds = tf.keras.utils.image_dataset_from_directory(
         DATASET_DIR,
         validation_split=0.2,
         subset="validation",
         seed=123,
         image_size=(IMG_HEIGHT, IMG_WIDTH),
-        batch_size=1, # Prendiamo una immagine alla volta per semplicità
+        batch_size=1,
         label_mode='binary'
     )
-    validation_data_for_display = list(raw_val_ds.unbatch().as_numpy_iterator())
-    print("✓ Dati di validazione per visualizzazione pronti.")
+    
+    # Separa le immagini di validazione in due liste per categoria
+    linea_images = []
+    no_linea_images = []
+    # Keras assegna le etichette in ordine alfabetico: linea (0), no_linea (1)
+    linea_index = class_names.index('linea')
+    no_linea_index = class_names.index('no_linea')
+
+    for img, label in raw_val_ds.unbatch().as_numpy_iterator():
+        if int(label) == linea_index:
+            linea_images.append((img, label))
+        else:
+            no_linea_images.append((img, label))
+
+    print(f"✓ Dati di validazione pronti: {len(linea_images)} immagini 'linea', {len(no_linea_images)} immagini 'no_linea'.")
+
+    # Definisci il layer di augmentation qui per applicarlo alle immagini di test
+    test_augmentation = tf.keras.Sequential([
+        tf.keras.layers.RandomFlip("horizontal"),
+        tf.keras.layers.RandomRotation(0.3), # Stessi fattori di train.py
+        tf.keras.layers.RandomZoom(0.3),     # Stessi fattori di train.py
+        tf.keras.layers.RandomBrightness(factor=0.2), # Stesso fattore di train.py
+    ], name='test_augmentation')
 
     while True:
         print("\n--- Test Interattivo ---")
-        
-        # Scegli un'immagine e la sua etichetta a caso dal dataset RAW
-        original_img_np, true_label_index_raw = random.choice(validation_data_for_display)
+        scelta = input("Cosa vuoi testare? (1: linea / 2: no_linea / s: casuale / n: esci): ").strip().lower()
+
+        img_to_test_data = None
+        if scelta == '1':
+            if not linea_images:
+                print("❌ Nessuna immagine 'linea' nel set di validazione.")
+                continue
+            img_to_test_data = random.choice(linea_images)
+        elif scelta == '2':
+            if not no_linea_images:
+                print("❌ Nessuna immagine 'no_linea' nel set di validazione.")
+                continue
+            img_to_test_data = random.choice(no_linea_images)
+        elif scelta == 's' or scelta == '':
+            all_images = linea_images + no_linea_images
+            if not all_images:
+                print("❌ Nessuna immagine nel set di validazione.")
+                continue
+            img_to_test_data = random.choice(all_images)
+        elif scelta == 'n':
+            break
+        else:
+            print("Scelta non valida. Riprova.")
+            continue
+            
+        original_img_np, true_label_index_raw = img_to_test_data
         true_label_name = class_names[int(true_label_index_raw)]
 
-        # Applica il preprocessing solo all'immagine che va al modello
-        img_for_prediction = tf.keras.applications.mobilenet_v3.preprocess_input(original_img_np)
+        # Applica l'augmentation all'immagine originale per visualizzazione e predizione
+        # Converti a tf.Tensor prima di applicare l'augmentation
+        augmented_img_tensor = test_augmentation(tf.expand_dims(original_img_np, axis=0), training=False)
+        augmented_img_np = augmented_img_tensor[0].numpy()
+
+        # Applica il preprocessing specifico di MobileNetV3Small all'immagine aumentata
+        img_for_prediction = tf.keras.applications.mobilenet_v3.preprocess_input(augmented_img_np)
         img_array_expanded = np.expand_dims(img_for_prediction, axis=0)
         
         # Predizione
         prediction_score = model.predict(img_array_expanded)[0][0]
-        predicted_class_index = 1 if prediction_score > 0.5 else 0
+        predicted_class_index = no_linea_index if prediction_score > 0.5 else linea_index
         predicted_class_name = class_names[predicted_class_index]
 
-        # Mostra i risultati usando l'immagine originale non preprocessata per la visualizzazione
-        plt.imshow(original_img_np.astype("uint8"))
+        # Mostra i risultati usando l'immagine aumentata
+        plt.imshow(augmented_img_np.astype("uint8"))
         plt.title(f"Reale: {true_label_name} | Predetto: {predicted_class_name} (Score: {prediction_score:.2f})")
         plt.axis("off")
         plt.show()
-
-        # Chiedi all'utente se vuole continuare
-        scelta = input("\nVuoi testare un'altra immagine? (s/n): ").strip().lower()
-        if scelta != 's':
-            break
 
 def main():
     """Funzione principale per orchestrare il test."""

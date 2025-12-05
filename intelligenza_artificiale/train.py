@@ -120,7 +120,7 @@ def save_results(model, history, class_names):
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     
     # Salva il modello
-    model_path = os.path.join(OUTPUT_DIR, 'line_detection_model.h5')
+    model_path = os.path.join(OUTPUT_DIR, 'line_detection_model.keras')
     model.save(model_path)
     print(f"✓ Modello salvato in: {model_path}")
     
@@ -147,8 +147,8 @@ def main():
     # Data Augmentation per migliorare la generalizzazione del modello (applicata al dataset)
     data_augmentation = tf.keras.Sequential([
         tf.keras.layers.RandomFlip("horizontal"),
-        tf.keras.layers.RandomRotation(0.2),
-        tf.keras.layers.RandomZoom(0.2),
+        tf.keras.layers.RandomRotation(0.3),
+        tf.keras.layers.RandomZoom(0.3),
         tf.keras.layers.RandomBrightness(factor=0.2), # Aggiunta random brightness
     ], name='data_augmentation')
 
