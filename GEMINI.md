@@ -6,7 +6,7 @@ Questo documento `GEMINI.md` serve come memoria interna e registro di contesto p
 
 ## Riepilogo della Sessione Attuale (Per la Prossima Sessione)
 
-This session focused on debugging runtime issues and further refining the data preprocessing pipeline to ensure robust and consistent behavior between training and inference.
+This session focused on debugging runtime issues, further refining the data preprocessing pipeline, enhancing data augmentation, and implementing a graceful shutdown feature in the training script.
 
 **1. Debugging Runtime Errors and Preprocessing Refinement:**
 -   **Initial Issue:** The user reported a generic error occurring "after main()", suggesting a runtime issue rather than a syntax error.
@@ -19,10 +19,19 @@ This session focused on debugging runtime issues and further refining the data p
     -   **Refactored Interactive Test:** The `interactive_test` function was significantly improved. It now loads *raw* images from the validation set for display (to maintain visual integrity) and then applies `tf.keras.applications.mobilenet_v3.preprocess_input` *just before* feeding the image to the model for prediction. This guarantees that the model receives data in the exact format it was trained on.
     -   **Matplotlib Backend:** Added `matplotlib.use('TkAgg')` at the beginning of the script to prevent potential display issues with plot windows.
 
-**2. Resolution of Syntax Error Report:**
+**2. Data Augmentation Enhancements (`train.py`):**
+-   **Added `RandomBrightness`:** Included `tf.keras.layers.RandomBrightness(factor=0.2)` to introduce random brightness variations in the training data.
+-   **Increased `RandomRotation`:** The `RandomRotation` factor was increased to `0.2` to provide a wider range of rotational augmentation.
+-   **Increased `RandomZoom`:** The `RandomZoom` factor was increased to `0.2` to provide a wider range of zoom augmentation.
+
+**3. Graceful Shutdown (`train.py`):**
+-   **Implemented `try...except KeyboardInterrupt`:** The `model.fit()` call is now wrapped in a `try...except` block.
+-   **Save on Interrupt:** If the user presses `Ctrl+C`, the training is gracefully stopped, and a new `save_results` function is called. Thanks to the `EarlyStopping` callback's `restore_best_weights=True` parameter, this saves the model from the epoch with the best `val_loss` achieved up to the point of interruption.
+
+**4. Resolution of Syntax Error Report:**
 -   The user reported a `;;;;;` syntax error after `main()`. Upon inspection of the actual files, this error was not present in the code. It was likely a misinterpretation of a runtime error message or a local console anomaly.
 
-**Stato Attuale:** Both `train.py` and `test.py` have been extensively refactored and debugged to ensure a robust and consistent MLOps pipeline for binary image classification. The data preprocessing is explicitly handled in the dataset pipeline, and the model's behavior during training and inference is correctly managed. The scripts are now ready for reliable training and testing.
+**Stato Attuale:** Both `train.py` and `test.py` have been extensively refactored and debugged to ensure a robust and consistent MLOps pipeline for binary image classification. The data preprocessing is explicitly handled in the dataset pipeline, and the model's behavior during training and inference is correctly managed. The data augmentation strategy has been enhanced, and a graceful shutdown feature has been added. The scripts are now ready for reliable training and testing.
 
 ---
 ## (Previous session summaries are kept below for historical context)

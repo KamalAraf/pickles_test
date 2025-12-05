@@ -114,6 +114,28 @@ def preprocess_dataset_item(image, label):
     image = tf.keras.applications.mobilenet_v3.preprocess_input(image)
     return image, label
 
+def save_results(model, history, class_names):
+    """Salva il modello, i grafici e i nomi delle classi."""
+    print("\n--- Salvataggio dei risultati ---")
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    
+    # Salva il modello
+    model_path = os.path.join(OUTPUT_DIR, 'line_detection_model.h5')
+    model.save(model_path)
+    print(f"✓ Modello salvato in: {model_path}")
+    
+    # Salva i nomi delle classi
+    class_path = os.path.join(OUTPUT_DIR, 'class_names.txt')
+    with open(class_path, 'w') as f:
+        for class_name in class_names:
+            f.write(f"{class_name}\n")
+    print(f"✓ Nomi delle classi salvati in: {class_path}")
+
+    # Salva i grafici solo se history non è None
+    if history and history.history:
+        plot_path = os.path.join(OUTPUT_DIR, 'training_history.png')
+        plot_history(history, plot_path)
+
 def main():
     """Funzione principale per orchestrare il processo."""
     clear_screen()
@@ -125,8 +147,9 @@ def main():
     # Data Augmentation per migliorare la generalizzazione del modello (applicata al dataset)
     data_augmentation = tf.keras.Sequential([
         tf.keras.layers.RandomFlip("horizontal"),
-        tf.keras.layers.RandomRotation(0.1),
-        tf.keras.layers.RandomZoom(0.1),
+        tf.keras.layers.RandomRotation(0.2),
+        tf.keras.layers.RandomZoom(0.2),
+        tf.keras.layers.RandomBrightness(factor=0.2), # Aggiunta random brightness
     ], name='data_augmentation')
 
     AUTOTUNE = tf.data.AUTOTUNE
@@ -149,41 +172,29 @@ def main():
     
     model.summary()
 
-    # Callback per interrompere il training se non ci sono miglioramenti
+    # Callback per interrompere il training se non ci sono miglioramenti e salvare i pesi migliori
     early_stopping = tf.keras.callbacks.EarlyStopping(
         monitor='val_loss',
         patience=10,
         restore_best_weights=True
     )
 
-    print("\n--- Avvio del training ---")
-    history = model.fit(
-        train_ds,
-        epochs=50,
-        validation_data=val_ds,
-        callbacks=[early_stopping]
-    )
-    print("✓ Training completato.")
-
-    # --- Salvataggio dei risultati ---
-    print("\n--- Salvataggio dei risultati ---")
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    history = None
+    try:
+        print("\n--- Avvio del training ---")
+        print("Premi Ctrl+C per interrompere l'addestramento e salvare il modello migliore ottenuto finora.")
+        history = model.fit(
+            train_ds,
+            epochs=50,
+            validation_data=val_ds,
+            callbacks=[early_stopping]
+        )
+        print("✓ Training completato.")
+    except KeyboardInterrupt:
+        print("\n❗️ Training interrotto dall'utente. Salvataggio del modello migliore in corso...")
     
-    # Salva il modello
-    model_path = os.path.join(OUTPUT_DIR, 'line_detection_model.h5')
-    model.save(model_path)
-    print(f"✓ Modello salvato in: {model_path}")
-    
-    # Salva i nomi delle classi
-    class_path = os.path.join(OUTPUT_DIR, 'class_names.txt')
-    with open(class_path, 'w') as f:
-        for class_name in class_names:
-            f.write(f"{class_name}\n")
-    print(f"✓ Nomi delle classi salvati in: {class_path}")
-
-    # Salva i grafici
-    plot_path = os.path.join(OUTPUT_DIR, 'training_history.png')
-    plot_history(history, plot_path)
+    # Salva i risultati, sia in caso di completamento che di interruzione
+    save_results(model, history, class_names)
     
     print(f"\n{'='*50}\nPROCESSO COMPLETATO\n{'='*50}")
 
