@@ -6,6 +6,43 @@ Questo documento `GEMINI.md` serve come memoria interna e registro di contesto p
 
 ## Riepilogo della Sessione Attuale (Per la Prossima Sessione)
 
+This session focused on a complete refactoring and simplification of the AI training and testing pipeline to address the user's core requirement: classifying images as containing a line (`linea`) or not (`no_linea`).
+
+**1. Objective: Simplification and Refocus**
+-   **Goal:** The primary goal was to remove all legacy complexity from `train.py` and `test.py` (related to CIFAR-10, multi-phase training, continuation logic, complex menus) and create a streamlined pipeline for the user's specific binary classification task.
+-   **Dataset:** The system now works with the user-defined dataset structure located at `intelligenza_artificiale/dataset/`, which is split into `linea` and `no_linea` parent directories, each containing multiple sub-folders of images.
+
+**2. `train.py` - Complete Rewrite**
+-   **Data Loading:** All custom data loaders were removed. The script now uses the highly efficient `tf.keras.utils.image_dataset_from_directory`.
+    -   It's configured for binary classification (`label_mode='binary'`).
+    -   It automatically splits the data into an 80% training set and a 20% validation set.
+    -   The pipeline is optimized with `.cache()` and `.prefetch()`.
+-   **Model Architecture:**
+    -   The model uses `MobileNetV3Small` as a base for efficiency.
+    -   The classification head is simple and correct for a binary task: `GlobalAveragePooling2D`, `Dropout`, and a **single `Dense` neuron with a `sigmoid` activation**.
+    -   The loss function is `binary_crossentropy`.
+-   **Training Process:**
+    -   The training is a single, straightforward `model.fit()` call.
+    -   `EarlyStopping` is used to monitor `val_loss`, preventing overfitting and stopping the training automatically when performance plateaus.
+-   **Artifacts:** All outputs are saved to a new, dedicated directory: `intelligenza_artificiale/modello_linea/`. This includes:
+    -   `line_detection_model.h5`: The trained model.
+    -   `class_names.txt`: A file containing the two class names, used by `test.py`.
+    -   `training_history.png`: Plots of accuracy and loss over epochs.
+
+**3. `test.py` - Complete Rewrite**
+-   **Alignment with Training:** The script is now perfectly aligned with `train.py`.
+-   **Model Loading:** It loads the model and class names from the `modello_linea` directory.
+-   **Evaluation:** It correctly loads the 20% validation set (using the same `seed` as the training script) and evaluates the model's performance on it, printing the accuracy and loss.
+-   **Interactive Testing:**
+    -   It provides a user-friendly loop to test random images from the validation set.
+    -   For each image, it displays the true label and the model's prediction (including the raw prediction score from the sigmoid neuron).
+    -   It correctly handles the mapping of the sigmoid output (e.g., `<0.5` vs. `>0.5`) to the class names.
+
+**Stato Attuale:** The project is now clean, simple, and robustly tailored to the user's specific goal. The training and testing scripts are easy to understand and use. The user can now run `train.py` to train the model and then `test.py` to see how well it performs and test it interactively.
+
+---
+## (Previous session summaries are kept below for historical context)
+
 This session focused on implementing model interpretability and further optimizing the training process. The journey was complex, involving deep debugging of Keras model loading and graph execution, ultimately leading to a successful implementation of Occlusion Sensitivity.
 
 **1. Training Optimization (Initial Request & `train.py`):**
